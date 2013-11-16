@@ -1,0 +1,240 @@
+import com.leapmotion.leap.*;
+import com.leapmotion.leap.processing.LeapMotion;
+import themidibus.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+LeapMotion leapMotion;
+MidiBus myBus;
+boolean [] whitekeyplaying;
+float [] fingerXs, fingerYs, fingerZs;
+int validFingers; 
+
+
+//SETUP
+int FRAMEWIDTH= 1400, FRAMEHEIGHT= 800;
+int FRAMERATE = 100;
+int BACKGROUND_COLOR = 0;
+
+//WHITE KEYS
+float[] WHITE_KEY_XS = {
+  250, 550, 850, 1150
+};
+
+int[] WHITE_KEY_MIDI_NUMBERS = {
+  36, 40, 59, 37
+};
+
+// 36 bass
+// 40 snare
+// 37 snare hit
+// 56 cowbell 
+// 59 ride cymbal
+//60 high bongo
+//62 low bongo
+//85 gong
+//81 triangle
+
+int NUM_WHITE_KEYS = 4;
+float WHITE_KEY_Y = 604;
+int WHITE_KEY_Z = 0;
+
+int WHITE_KEY_WIDTH = 200;
+int WHITE_KEY_HEIGHT = 200;
+int WHITE_KEY_DEPTH = 200;  
+int WHITE_KEY_COLOR = color(255, 255, 255, 200);
+int WHITE_KEY_BORDER_COLOR = color(0, 0, 0, 255);
+int WHITE_KEY_PLAYING_COLOR = color(8, 255, 236, 150);
+
+int WHITE_KEY_VOLUME = 255;
+
+//FINGERS
+int FINGER_RADIUS = (20);
+int FINGER_FILL_COLOR = (#FF1500);
+int FINGER_STROKE_COLOR = (127); 
+float FINGER_STROKE_WEIGHT = .5;
+
+void setup() {
+  // Set up our window
+  size(FRAMEWIDTH, FRAMEHEIGHT, P3D);
+  background(255);
+  noStroke(); 
+  fill(200);
+  frameRate(FRAMERATE);
+  smooth();
+
+  // Open Leap and MIDI interfaces
+  leapMotion = new LeapMotion(this);
+  //myBus = new MidiBus(this, -1, "Microsoft GS Wavetable Synth"); // Create a new MidiBus with no input device and the default Java Sound Synthesizer as the output device.
+  myBus = new MidiBus(this, -1, "For Reaper"); // this line sends MIDI to the IAC virtual MIDI driver (run the MidiBus Basic example to see a list of MIDI devices on your machine)
+  //myBus = new MidiBus(this, -1, "For Logic"); // this line sends MIDI to the IAC virtual MIDI driver (run the MidiBus Basic example to see a list of MIDI devices on your machine)
+
+  fingerXs = new float[10];
+  fingerYs = new float[10];
+  fingerZs = new float[10];
+  whitekeyplaying = new boolean[NUM_WHITE_KEYS];
+  validFingers = 0;
+}
+
+void draw() {
+  background(BACKGROUND_COLOR);
+  noStroke();
+  lights();
+  frameRate(FRAMERATE);
+  //camera(width/2.0, height/2, (height/2) / tan(PI*30.0 / 180.0), width/2, height/2.0, 0, 0, 1, 0);
+  if (keyPressed) {
+    if (key == 'c' || key == 'C') 
+      camera(mouseX, mouseY-300, (height/2) / tan(PI*30.0 / 180.0), width/2, height/2.0, 0, 0, 1, 0);
+  }
+
+  //calibrate white key ys
+  if (mousePressed) {
+    float sum = 0;
+    for (int m = 0; m < validFingers; m++) {
+      sum += fingerYs[m];
+    }
+    float avg = sum / validFingers;
+    WHITE_KEY_Y = avg + WHITE_KEY_HEIGHT/2 - 5;
+  }
+
+  //draw fingers
+  for (int i = 0; i < validFingers; i++) {
+    strokeWeight(FINGER_STROKE_WEIGHT);
+    //stroke(FINGER_STROKE_COLOR);
+    noStroke();
+    fill (FINGER_FILL_COLOR);
+    translate(fingerXs[i], fingerYs[i], fingerZs[i]);
+    sphere(FINGER_RADIUS);
+    translate(-fingerXs[i], -fingerYs[i], -fingerZs[i]);
+  }
+
+  //setup white notes hit test
+  for (int whitekeycounter = 0; whitekeycounter < WHITE_KEY_XS.length ; whitekeycounter++) {
+    boolean anyhitwhitekey = false;
+    for (int j = 0; j < validFingers; j++) {
+      if (whitehitTest(WHITE_KEY_XS[whitekeycounter], WHITE_KEY_Y, fingerXs[j], fingerYs[j], fingerZs[j])) {
+        anyhitwhitekey = true;
+        break;
+      }
+    }
+    if (whitekeyplaying[whitekeycounter] && !anyhitwhitekey) {
+      stopwhitenote(whitekeycounter);
+      whitekeyplaying[whitekeycounter] = false;
+    }  
+    else if (!whitekeyplaying[whitekeycounter] && anyhitwhitekey) {
+      playwhitenote(whitekeycounter);
+      whitekeyplaying[whitekeycounter] = true;
+    }
+  } 
+
+  //draw white keys
+  for (int i=0;i<NUM_WHITE_KEYS;i++) {
+    if (!whitekeyplaying[i]) {
+      stroke(WHITE_KEY_BORDER_COLOR);
+      fill(WHITE_KEY_COLOR);
+    }
+    else {
+      fill(WHITE_KEY_PLAYING_COLOR);
+    }
+    translate(WHITE_KEY_XS[i], WHITE_KEY_Y, WHITE_KEY_Z);
+    box(WHITE_KEY_WIDTH, WHITE_KEY_HEIGHT, WHITE_KEY_DEPTH);
+    translate(-WHITE_KEY_XS[i], -WHITE_KEY_Y, -WHITE_KEY_Z);
+  }
+
+  //  for (int i=0;i<NUM_WHITE_KEYS;i++) {
+  //    if (!whitekeyplaying[i]) {
+  //      noStroke();
+  //      fill(243, 0, 231, 225);
+  //      pushMatrix();
+  //      translate(450, 500, 0);
+  //      drawCylinder(170, 140, 200, 64); // Draw a cylinder
+  //      popMatrix();
+  //
+  //      pushMatrix();
+  //      noStroke();
+  //      fill(0, 20, 220, 225);
+  //      translate(900, 500, 0);
+  //      drawCylinder(170, 140, 200, 64); // Draw a cylinder
+  //      popMatrix();
+  //    }
+  //    else {
+  //      noStroke();
+  //      fill(2, 247, 100, 150);
+  //      pushMatrix();
+  //      translate(450, 500, 0);
+  //      drawCylinder(170, 140, 200, 64); // Draw a cylinder
+  //      popMatrix();
+  //
+  //      pushMatrix();
+  //      noStroke();
+  //      fill(2, 247, 100, 150);
+  //      translate(900, 500, 0);
+  //      drawCylinder(170, 140, 200, 64); // Draw a cylinder
+  //      popMatrix();
+  //    }
+  //  }
+
+  fill(33, 244, 255);
+  text("Press c to move camera with mouse", 20, 150, 0);
+  //  text("Press b to play bongos", 20, 170, 0);
+  //  text("Press t to play triangle", 20, 190, 0);
+  //  text("Press x to play drumkit", 20, 210, 0);
+  //  text("Press z to play hip hop drumkit - bass snare cymbal", 20, 230, 0);
+  //  text("Press y to play triangle gong cowbell", 20, 250, 0);
+}
+
+//drawCylinder(0, 180, 200, 4); // Draw a pyramid
+
+void drawCylinder(float topRadius, float bottomRadius, float tall, int sides) {
+  float angle = 0;
+  float angleIncrement = TWO_PI / sides;
+  pushMatrix();
+  beginShape(QUAD_STRIP);
+  for (int i = 0; i < sides + 1; ++i) {
+    vertex(topRadius*cos(angle), 0, topRadius*sin(angle));
+    vertex(bottomRadius*cos(angle), tall, bottomRadius*sin(angle));
+    angle += angleIncrement;
+  }
+  endShape();
+  popMatrix();
+}
+
+//white key hitTest
+boolean whitehitTest (float whitekeyX, float whitekeyY, float wkfingerX, float wkfingerY, float wkfingerZ) {
+  if (wkfingerX < whitekeyX + WHITE_KEY_WIDTH/2 && wkfingerX > whitekeyX - WHITE_KEY_WIDTH/2 
+    && wkfingerY < whitekeyY + WHITE_KEY_HEIGHT/2 && wkfingerY > whitekeyY - WHITE_KEY_HEIGHT/2
+    && wkfingerZ < WHITE_KEY_Z + WHITE_KEY_DEPTH/2 && wkfingerZ > WHITE_KEY_Z - WHITE_KEY_DEPTH/2)
+    return true;
+  else return false;
+}
+
+//shifts the s for callibrating xs
+void adjustXs(float shift) {
+  WHITE_KEY_XS[0] = shift;
+  for (int j = 1; j < NUM_WHITE_KEYS; j++) {
+    WHITE_KEY_XS[j] = (WHITE_KEY_XS[j-1] + 75);
+  }
+}
+
+//white notes on off
+void playwhitenote(int white_key) {
+  myBus.sendNoteOn(1, WHITE_KEY_MIDI_NUMBERS[white_key], WHITE_KEY_VOLUME);
+}
+void stopwhitenote(int white_key) {
+  myBus.sendNoteOff(1, WHITE_KEY_MIDI_NUMBERS[white_key], WHITE_KEY_VOLUME);
+}
+
+
+// Called repeatedly with new data from the Leap
+void onFrame(final Controller controller)
+{  
+  Frame frame = controller.frame();
+  validFingers = 0;
+  for ( Finger finger : frame.fingers() ) {
+    fingerXs[validFingers] = leapMotion.leapToSketchX(finger.tipPosition().getX());
+    fingerYs[validFingers] = leapMotion.leapToSketchY(finger.tipPosition().getY());
+    fingerZs[validFingers] = finger.tipPosition().getZ();
+    validFingers++;
+    if (validFingers > 10)
+      break;
+  }
+}
